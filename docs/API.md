@@ -32,8 +32,16 @@ Crée un Payment Intent pour régler une prestation, avec commission de platefor
 
 - **Requête** : `{ serviceId: uuid, duration: number /* heures, services horaires */, addonIds: uuid[], bookingDate: 'YYYY-MM-DDTHH:MM:00', isRecurring: boolean, recurrenceInterval: 'weekly' | 'biweekly' | 'monthly', recurrenceEndDate: 'YYYY-MM-DD' | '' }` — JWT requis (`Authorization: Bearer`)
 - **Sécurité** : le client est l'utilisateur du JWT ; le pro, le prix du service et celui des options sont relus en base. Le montant n'est **jamais** fourni par le front : il est recalculé côté serveur (`price × durée` si service horaire, + options). Refuse un service inactif, un pro suspendu pour litige et un créneau déjà pris.
-- **Logique** : lit `stripe_connect_id` du pro ; commission **14 %** (première prestation) ou **9 %** (client récurrent = ≥ 1 booking `completed` avec ce pro) ; + **25 %** de taxe sur la commission ; `transfer_data.destination` = pro, `application_fee_amount` = commission totale.
-- **Metadata** : `{ kind: 'booking', clientId, proId, serviceId, hours, bookingDate, isRecurring, recurrenceInterval, recurrenceEndDate, isRepeated }` — la réservation sera créée à partir de ces valeurs, figées au moment du paiement.
+- **Logique** : lit `stripe_connect_id` et `subscription_tier` du pro ; commission selon le palier et le type de client (client récurrent = ≥ 1 booking `completed` avec ce pro) ; + **25 %** de taxe sur la commission ; `transfer_data.destination` = pro, `application_fee_amount` = commission totale.
+
+  | Palier du pro | Nouveau client | Client récurrent |
+  | ------------- | -------------- | ---------------- |
+  | `essential` (0 €)   | 14 % | 9 % |
+  | `flex` (39 €/mois)  | 12 % | 8 % |
+  | `plus` (59 €/mois)  | 10 % | 7 % |
+
+  Le palier ne peut être modifié que côté serveur (trigger `protect_subscription_tier`, migration `protect_subscription_tier.sql`).
+- **Metadata** : `{ kind: 'booking', clientId, proId, serviceId, hours, bookingDate, isRecurring, recurrenceInterval, recurrenceEndDate, isRepeated, proSubscriptionTier, commissionRate }` — la réservation sera créée à partir de ces valeurs, figées au moment du paiement.
 - **Réponse** : `{ clientSecret, paymentIntentId, amount /* centimes */, details: { rate, isRepeated, totalFee } }`
 
 ### `confirm-booking`

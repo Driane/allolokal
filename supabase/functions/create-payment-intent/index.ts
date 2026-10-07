@@ -16,6 +16,13 @@ const corsHeaders = {
 // Durées proposées par BookingPage pour un service facturé à l'heure
 const ALLOWED_HOURS = [1, 2, 3, 4, 5]
 
+// Commission plateforme selon l'abonnement du pro (cf. PricingPage, ProOnboarding, CGU)
+const COMMISSION_RATES: Record<string, { newClient: number; returningClient: number }> = {
+  essential: { newClient: 0.14, returningClient: 0.09 },
+  flex:      { newClient: 0.12, returningClient: 0.08 },
+  plus:      { newClient: 0.10, returningClient: 0.07 },
+}
+
 const toCents = (euros: unknown) => Math.round(Number(euros) * 100)
 
 serve(async (req: Request) => {
@@ -84,7 +91,7 @@ serve(async (req: Request) => {
     const proId = service.user_id
     const { data: proProfile, error: proError } = await supabaseAdmin
       .from('profiles')
-      .select('stripe_connect_id, is_paused_for_dispute')
+      .select('stripe_connect_id, is_paused_for_dispute, subscription_tier')
       .eq('id', proId)
       .single()
 
@@ -107,7 +114,7 @@ serve(async (req: Request) => {
       throw new Error("Ce créneau vient d'être pris par quelqu'un d'autre. Veuillez en choisir un autre.")
     }
 
-    // 4. Calcul de la commission (9% client récurrent, 14% sinon) + 25% de taxe sur la commission
+    // 4. Calcul de la commission (taux selon l'abonnement du pro et client récurrent) + 25% de taxe sur la commission
     const { count } = await supabaseAdmin
       .from('bookings')
       .select('*', { count: 'exact', head: true })
@@ -116,7 +123,8 @@ serve(async (req: Request) => {
       .eq('status', 'completed')
 
     const isRepeated = count !== null && count > 0
-    const baseRate = isRepeated ? 0.09 : 0.14
+    const rates = COMMISSION_RATES[proProfile.subscription_tier] ?? COMMISSION_RATES.essential
+    const baseRate = isRepeated ? rates.returningClient : rates.newClient
 
     const platformCommission = amountInCentimes * baseRate
     const taxOnCommission = platformCommission * 0.25
@@ -141,7 +149,9 @@ serve(async (req: Request) => {
         isRecurring: String(recurring),
         recurrenceInterval: recurring ? recurrenceInterval : '',
         recurrenceEndDate: recurrenceEnd,
-        isRepeated: String(isRepeated)
+        isRepeated: String(isRepeated),
+        proSubscriptionTier: proProfile.subscription_tier ?? 'essential',
+        commissionRate: String(baseRate)
       }
     })
 
