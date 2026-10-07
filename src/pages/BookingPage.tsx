@@ -285,12 +285,12 @@ const BookingPage: React.FC = () => {
         throw new Error(t('booking.error_pro_paused', 'Ce prestataire est temporairement indisponible suite à un litige en cours. Veuillez réessayer ultérieurement.'));
       }
 
+      // Le montant, le pro et le client sont déterminés côté serveur : on n'envoie que la sélection
       const { data, error } = await supabase.functions.invoke('create-payment-intent', {
-        body: { 
-          amount: Math.round(totalPrice * 100), 
-          currency: 'eur',
-          proId: service.user_id, // L'ID du professionnel
-          clientId: session.user.id // L'ID du client actuel
+        body: {
+          serviceId: service.id,
+          duration,
+          addonIds: selectedAddonIds,
         }
       });
 

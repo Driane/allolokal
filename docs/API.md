@@ -30,9 +30,10 @@ Configurés via `supabase secrets set NOM=valeur` (jamais dans le front) :
 ### `create-payment-intent`
 Crée un Payment Intent pour régler une prestation, avec commission de plateforme prélevée sur le compte Connect du pro.
 
-- **Requête** : `{ amount: number /* centimes */, currency: string, proId: uuid, clientId: uuid }`
+- **Requête** : `{ serviceId: uuid, duration: number /* heures, services horaires */, addonIds: uuid[] }` — JWT requis (`Authorization: Bearer`)
+- **Sécurité** : le client est l'utilisateur du JWT ; le pro, le prix du service et celui des options sont relus en base. Le montant n'est **jamais** fourni par le front : il est recalculé côté serveur (`price × durée` si service horaire, + options).
 - **Logique** : lit `stripe_connect_id` du pro ; commission **14 %** (première prestation) ou **9 %** (client récurrent = ≥ 1 booking `completed` avec ce pro) ; + **25 %** de taxe sur la commission ; `transfer_data.destination` = pro, `application_fee_amount` = commission totale.
-- **Réponse** : `{ clientSecret, paymentIntentId, details: { rate, isRepeated, totalFee } }`
+- **Réponse** : `{ clientSecret, paymentIntentId, amount /* centimes */, details: { rate, isRepeated, totalFee } }`
 
 ### `create-connected-account`
 Crée le compte **Stripe Connect Express** d'un pro (pays `HR`) et renvoie le lien d'onboarding.
