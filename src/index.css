@@ -1,0 +1,321 @@
+@import "tailwindcss";
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   1. FONTS — auto-hébergées via @fontsource-variable (importées dans main.tsx)
+   Police : Plus Jakarta Sans Variable (SIL OFL 1.1)
+   Aucun appel vers fonts.googleapis.com / fonts.gstatic.com
+═══════════════════════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   2. VARIABLES CSS — THÈME BLANC (défaut)
+   Orange tiré du logo AlloLokal : #E05530
+   Les thèmes Gris (.dark) et Noir (.premium) ne surchargent que les fonds.
+═══════════════════════════════════════════════════════════════════════════ */
+:root {
+  /* ── Fonds ── */
+  --color-bg-primary:     #FEFEFE;
+  --color-bg-secondary:   #FFFFFF;
+  --color-bg-tertiary:    #F5F3F0;
+  --color-bg-nav:         rgba(254, 254, 254, 0.88);
+
+  /* ── Texte ── */
+  --color-text-main:      #1C1410;
+  --color-text-muted:     #6B6460;
+  --color-text-inverse:   #FFFFFF;
+
+  /* ── Accent — orange logo ── */
+  --color-accent:         #E05530;
+  --color-accent-hover:   #C44A28;
+  --color-accent-light:   rgba(224, 85, 48, 0.10);
+
+  /* ── Bordures & ombres ── */
+  --color-border:         #EAE7E3;
+  --color-border-strong:  #D4CFC8;
+  --color-shadow:         rgba(0, 0, 0, 0.06);
+  --color-shadow-lg:      rgba(0, 0, 0, 0.12);
+
+  /* ── Logo accent ── */
+  --color-logo-accent:    #E05530;
+
+  /* ── États ── */
+  --color-success:        #10B981;
+  --color-error:          #EF4444;
+  --color-warning:        #F59E0B;
+
+  /* ── Glassmorphism ── */
+  --glass-bg:             rgba(255, 255, 255, 0.72);
+  --glass-border:         rgba(0, 0, 0, 0.07);
+  --glass-shadow:         0 8px 32px rgba(0, 0, 0, 0.08);
+
+  /* ── Misc ── */
+  --radius-md:            16px;
+  --font-main:            'Plus Jakarta Sans Variable', sans-serif;
+  --transition-smooth:    0.4s cubic-bezier(0.4, 0, 0.2, 1);
+
+  --primary:              hsl(18, 75%, 53%);
+  --primary-rgb:          224, 85, 48;
+  --secondary:            hsl(18, 60%, 40%);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   3. THÈME GRIS (classe .dark sur <html>)
+   Ancien thème sombre (bleu → orange)
+═══════════════════════════════════════════════════════════════════════════ */
+.dark {
+  --color-bg-primary:     #0b0e14;
+  --color-bg-secondary:   #131720;
+  --color-bg-tertiary:    #1a1f2e;
+  --color-bg-nav:         rgba(11, 14, 20, 0.80);
+
+  --color-text-main:      #F0F2F8;
+  --color-text-muted:     #8892A4;
+  --color-text-inverse:   #FFFFFF;
+
+  --color-accent:         #E05530;
+  --color-accent-hover:   #F06540;
+  --color-accent-light:   rgba(224, 85, 48, 0.15);
+
+  --color-border:         rgba(255, 255, 255, 0.07);
+  --color-border-strong:  rgba(255, 255, 255, 0.12);
+  --color-shadow:         rgba(0, 0, 0, 0.30);
+  --color-shadow-lg:      rgba(0, 0, 0, 0.50);
+
+  --color-logo-accent:    #E05530;
+
+  --glass-bg:             rgba(19, 23, 32, 0.70);
+  --glass-border:         rgba(255, 255, 255, 0.08);
+  --glass-shadow:         0 8px 32px rgba(0, 0, 0, 0.30);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   4. THÈME NOIR (classe .premium sur <html>)
+   Fond très sombre + orange
+═══════════════════════════════════════════════════════════════════════════ */
+.premium {
+  --color-bg-primary:     #0E0B09;
+  --color-bg-secondary:   #181210;
+  --color-bg-tertiary:    #221A16;
+  --color-bg-nav:         rgba(14, 11, 9, 0.92);
+
+  --color-text-main:      #F5EDE8;
+  --color-text-muted:     #8A7A72;
+  --color-text-inverse:   #0E0B09;
+
+  --color-accent:         #E05530;
+  --color-accent-hover:   #F06540;
+  --color-accent-light:   rgba(224, 85, 48, 0.15);
+
+  --color-border:         rgba(224, 85, 48, 0.14);
+  --color-border-strong:  rgba(224, 85, 48, 0.28);
+  --color-shadow:         rgba(0, 0, 0, 0.50);
+  --color-shadow-lg:      rgba(0, 0, 0, 0.70);
+
+  --color-logo-accent:    #E05530;
+
+  --glass-bg:             rgba(24, 18, 16, 0.80);
+  --glass-border:         rgba(224, 85, 48, 0.10);
+  --glass-shadow:         0 8px 32px rgba(0, 0, 0, 0.50);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   5. RESET & BASE
+═══════════════════════════════════════════════════════════════════════════ */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-main);
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-main);
+  margin: 0;
+  line-height: 1.6;
+  word-spacing: 0.04em;
+  overflow-x: hidden;
+  min-height: 100dvh;
+  transition: background-color 0.3s ease, color 0.3s ease;
+  /* Safe areas pour les appareils avec encoche/punch-hole/barre de navigation */
+  padding-top:    env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left:   env(safe-area-inset-left);
+  padding-right:  env(safe-area-inset-right);
+}
+
+
+/* Interligne + espacement pour les titres — diacritiques croates (Č Ć Š Ž Đ)
+   et lisibilité multilingue */
+h1, h2, h3, h4 {
+  line-height: 1.2;
+  word-spacing: 0.08em;
+}
+
+
+/* Compensate dans les éléments fixed (navbar, modals) */
+.capacitor-safe-top    { padding-top:    env(safe-area-inset-top) !important; }
+.capacitor-safe-bottom { padding-bottom: env(safe-area-inset-bottom) !important; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   6. COMPOSANTS UTILITAIRES (partagés entre thèmes)
+═══════════════════════════════════════════════════════════════════════════ */
+
+/* Dégradé de texte (logo, titres) */
+.text-gradient {
+  background: linear-gradient(135deg, var(--color-accent), var(--secondary, hsl(265, 85%, 60%)));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Bouton principal */
+.btn-primary {
+  background: var(--color-accent);
+  color: var(--color-text-inverse);
+  box-shadow: 0 4px 15px rgba(var(--primary-rgb, 224, 85, 48), 0.3);
+  transition: var(--transition-smooth);
+  border: none;
+  cursor: pointer;
+}
+.btn-primary:hover {
+  background: var(--color-accent-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(var(--primary-rgb, 224, 85, 48), 0.5);
+}
+
+/* Card glassmorphism */
+.glass-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--glass-shadow);
+  transition: var(--transition-smooth);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   7. ANIMATIONS
+═══════════════════════════════════════════════════════════════════════════ */
+.animate-in {
+  animation: slideUp 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-shake {
+  animation: shake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+
+/* Utilisé par HScroll — masque la scrollbar native sans bloquer le scroll tactile */
+.hscroll-hide-sb {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.hscroll-hide-sb::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes shake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-4px); }
+  40%, 60% { transform: translateX(4px); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   8. SLIDERS (FindPro — budget dual-range + rayon single-range)
+═══════════════════════════════════════════════════════════════════════════ */
+.dual-range-input {
+  pointer-events: none;
+  height: 100%;
+  touch-action: none;
+  cursor: pointer;
+  outline: none;
+  accent-color: var(--color-accent);
+}
+.dual-range-input::-webkit-slider-runnable-track {
+  background: rgba(128, 120, 115, 0.35);
+  height: 6px;
+  border-radius: 3px;
+}
+.dual-range-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  pointer-events: all;
+  touch-action: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid var(--color-accent);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+.dual-range-input::-moz-range-track {
+  background: rgba(128, 120, 115, 0.35);
+  height: 6px;
+  border-radius: 3px;
+  border: none;
+}
+.dual-range-input::-moz-range-progress {
+  background: var(--color-accent);
+  height: 6px;
+  border-radius: 3px;
+}
+.dual-range-input::-moz-range-thumb {
+  pointer-events: all;
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid var(--color-accent);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.single-range-input {
+  height: 100%;
+  touch-action: none;
+  cursor: pointer;
+  outline: none;
+  accent-color: var(--color-accent);
+}
+.single-range-input::-webkit-slider-runnable-track {
+  background: rgba(128, 120, 115, 0.35);
+  height: 6px;
+  border-radius: 3px;
+}
+.single-range-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  touch-action: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid var(--color-accent);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+.single-range-input::-moz-range-track {
+  background: rgba(128, 120, 115, 0.35);
+  height: 6px;
+  border-radius: 3px;
+  border: none;
+}
+.single-range-input::-moz-range-progress {
+  background: var(--color-accent);
+  height: 6px;
+  border-radius: 3px;
+}
+.single-range-input::-moz-range-thumb {
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid var(--color-accent);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}

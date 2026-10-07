@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+
+# Pages privées — ne pas indexer
+Disallow: /dashboard
+Disallow: /dashboard/
+Disallow: /onboarding
+Disallow: /messages
+Disallow: /reset-password
+Disallow: /auth
+
+# Sitemap
+Sitemap: https://allolokal.com/sitemap.xml

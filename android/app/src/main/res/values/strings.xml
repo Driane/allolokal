@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">AlloLokal</string>
+    <string name="title_activity_main">AlloLokal</string>
+    <string name="package_name">com.allolokal.app</string>
+    <string name="custom_url_scheme">com.allolokal.app</string>
+</resources>

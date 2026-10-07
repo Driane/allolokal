@@ -1,0 +1,17 @@
+#!/bin/sh
+# Pre-commit hook : TypeScript bloquant, ESLint informatif.
+# Activé via : git config core.hooksPath .githooks
+
+echo "⏳ Vérification TypeScript..."
+npx tsc --noEmit
+if [ $? -ne 0 ]; then
+  echo "❌ Erreur TypeScript — commit bloqué. Corrigez les erreurs ci-dessus."
+  exit 1
+fi
+echo "✅ TypeScript OK"
+
+echo "⏳ ESLint (informatif, ne bloque pas)..."
+npx eslint src 2>&1 | grep " error \| warning " | head -20 || true
+echo "ℹ️  ESLint terminé (les avertissements ci-dessus ne bloquent pas le commit)."
+
+exit 0
