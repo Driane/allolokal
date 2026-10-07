@@ -420,7 +420,8 @@ entrypoint = "./functions/create-payment-intent/index.ts"
 
 [functions.stripe-webhooks]
 enabled = true
-verify_jwt = true
+# Stripe n'envoie pas de JWT : l'authenticité est vérifiée par la signature stripe-signature
+verify_jwt = false
 import_map = "./functions/stripe-webhooks/deno.json"
 # Uncomment to specify a custom file path to the entrypoint.
 # Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx

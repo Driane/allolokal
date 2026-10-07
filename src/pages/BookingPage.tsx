@@ -64,6 +64,7 @@ const BookingPage: React.FC = () => {
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [step, setStep] = useState(1);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
 
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date().toLocaleDateString('en-CA'));
@@ -266,7 +267,18 @@ const BookingPage: React.FC = () => {
     }
   };
 
-  // --- MODIFICATION ICI : APPEL AVEC NOUVELLE LOGIQUE DE COMMISSION ---
+  // Extraire le vrai message d'erreur retourné par une fonction edge
+  const functionErrorMessage = async (error: Error) => {
+    let message = error.message;
+    try {
+      const body = await (error as { context?: { json?: () => Promise<{ error?: string }> } }).context?.json?.();
+      if (body?.error) message = body.error;
+    } catch { /* ignore */ }
+    return message;
+  };
+
+  // Le montant, le pro, le client et la réservation sont déterminés côté serveur :
+  // le front n'envoie que la sélection, figée dans le paiement Stripe.
   const handleInitiatePayment = async () => {
     if (!selectedSlot || !service) return;
     setIsSubmitting(true);
@@ -275,7 +287,7 @@ const BookingPage: React.FC = () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { navigate('/auth'); return; }
 
-      // Vérifie si le pro est temporairement suspendu suite à un litige
+      // Vérifications d'affichage avant d'encaisser (revérifiées côté serveur)
       const { data: proStatus } = await supabase
         .from('profiles')
         .select('is_paused_for_dispute')
@@ -284,25 +296,24 @@ const BookingPage: React.FC = () => {
       if (proStatus?.is_paused_for_dispute) {
         throw new Error(t('booking.error_pro_paused', 'Ce prestataire est temporairement indisponible suite à un litige en cours. Veuillez réessayer ultérieurement.'));
       }
+      if (isDateBlockedByPeriod(selectedDate)) {
+        throw new Error(t('booking.error_period_location', 'Ce créneau n\'est pas disponible pour ce type de service à cette date.'));
+      }
 
-      // Le montant, le pro et le client sont déterminés côté serveur : on n'envoie que la sélection
       const { data, error } = await supabase.functions.invoke('create-payment-intent', {
         body: {
           serviceId: service.id,
           duration,
           addonIds: selectedAddonIds,
+          bookingDate: `${selectedDate}T${selectedSlot}:00`,
+          isRecurring,
+          recurrenceInterval,
+          recurrenceEndDate,
         }
       });
 
-      if (error) {
-        // Extraire le vrai message d'erreur retourné par la fonction edge
-        let message = error.message;
-        try {
-          const body = await (error as { context?: { json?: () => Promise<{ error?: string }> } }).context?.json?.();
-          if (body?.error) message = body.error;
-        } catch { /* ignore */ }
-        throw new Error(message);
-      }
+      if (error) throw new Error(await functionErrorMessage(error));
+      setPaymentIntentId(data.paymentIntentId);
       setClientSecret(data.clientSecret);
     } catch (err: unknown) {
       setPaymentError(err instanceof Error ? err.message : t('booking.error_payment_generic', 'Erreur de paiement, veuillez réessayer.'));
@@ -311,10 +322,12 @@ const BookingPage: React.FC = () => {
     }
   };
 
+  // Après un paiement réussi : confirm-booking vérifie le paiement chez Stripe puis crée la réservation
   const handleConfirmBooking = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { navigate('/auth'); return; }
+      if (!paymentIntentId) throw new Error(t('booking.error_payment_generic', 'Erreur de paiement, veuillez réessayer.'));
 
       let imageUrl = null;
       if (imageFile) {
@@ -331,75 +344,10 @@ const BookingPage: React.FC = () => {
         imageUrl = publicUrl;
       }
 
-      if (!service) throw new Error('Service introuvable');
-
-      // Vérification de dernière minute : le créneau est-il encore disponible ?
-      const { data: latestBookings } = await supabase
-        .from('bookings')
-        .select('id')
-        .eq('pro_id', service.user_id)
-        .neq('status', 'cancelled')
-        .eq('booking_date', `${selectedDate}T${selectedSlot}:00`);
-
-      if (latestBookings && latestBookings.length > 0) {
-        throw new Error(t('booking.slot_just_taken', 'Ce créneau vient d\'être pris par quelqu\'un d\'autre. Veuillez en choisir un autre.'));
-      }
-
-      if (isDateBlockedByPeriod(selectedDate)) {
-        throw new Error(t('booking.error_period_location', 'Ce créneau n\'est pas disponible pour ce type de service à cette date.'));
-      }
-
-      const bookingDuration = (service.price_unit === 'hour' || service.price_type === 'hourly') ? duration : 1;
-      const baseBooking = {
-        service_id:    service.id,
-        client_id:     session.user.id,
-        pro_id:        service.user_id,
-        booking_date:  `${selectedDate}T${selectedSlot}:00`,
-        duration:      bookingDuration,
-        total_price:   totalPrice,
-        notes:         note,
-        image_url:     imageUrl,
-        is_recurring:  isRecurring,
-        recurrence_interval: isRecurring ? recurrenceInterval : null,
-      };
-
-      // Insérer le premier (ou unique) booking
-      const { data: firstBooking, error } = await supabase.from('bookings').insert([{
-        ...baseBooking,
-        status:         'pending',
-        payment_status: 'paid',
-      }]).select().single();
-      if (error) throw error;
-
-      // Si récurrent : créer les occurrences futures
-      if (isRecurring && recurrenceEndDate && firstBooking) {
-        const seriesId = firstBooking.id;
-        // Marquer le premier booking avec recurrence_series_id
-        await supabase.from('bookings').update({ recurrence_series_id: seriesId, recurrence_end_date: recurrenceEndDate }).eq('id', seriesId);
-
-        const intervalDays = recurrenceInterval === 'weekly' ? 7 : recurrenceInterval === 'biweekly' ? 14 : 30;
-        const endDate = new Date(recurrenceEndDate);
-        const futureBookings = [];
-        let nextDate = new Date(`${selectedDate}T${selectedSlot}:00`);
-
-        while (true) {
-          nextDate = new Date(nextDate.getTime() + intervalDays * 24 * 60 * 60 * 1000);
-          if (nextDate > endDate) break;
-          const dateStr = nextDate.toISOString().slice(0, 10);
-          futureBookings.push({
-            ...baseBooking,
-            booking_date:          `${dateStr}T${selectedSlot}:00`,
-            status:                'pending',
-            payment_status:        'scheduled',
-            recurrence_series_id:  seriesId,
-            recurrence_end_date:   recurrenceEndDate,
-          });
-        }
-
-        if (futureBookings.length > 0) {
-          await supabase.from('bookings').insert(futureBookings);
-        }
-      }
+      const { error } = await supabase.functions.invoke('confirm-booking', {
+        body: { paymentIntentId, note, imageUrl }
+      });
+      if (error) throw new Error(await functionErrorMessage(error));
 
       setStep(2);
     } catch (err: unknown) {
@@ -560,9 +508,12 @@ const BookingPage: React.FC = () => {
                     const isSelected = selectedAddonIds.includes(addon.id);
                     return (
                       <div key={addon.id}
-                        onClick={() => setSelectedAddonIds(prev =>
-                          isSelected ? prev.filter(id => id !== addon.id) : [...prev, addon.id]
-                        )}
+                        onClick={() => {
+                          setSelectedAddonIds(prev =>
+                            isSelected ? prev.filter(id => id !== addon.id) : [...prev, addon.id]
+                          );
+                          setClientSecret(null);
+                        }}
                         className={`flex items-center justify-between p-5 rounded-2xl border cursor-pointer transition-all ${
                           isSelected ? 'bg-blue-500/10 border-blue-500/40' : 'bg-white/[0.03] border-white/10 hover:border-white/20'
                         }`}>
@@ -586,7 +537,7 @@ const BookingPage: React.FC = () => {
                 <h3 className="text-sm font-black italic flex items-center gap-4 uppercase tracking-widest text-blue-500">
                   <RefreshCw size={18} /> {t('booking.recurring_toggle', 'Réservation récurrente')}
                 </h3>
-                <button type="button" onClick={() => setIsRecurring(!isRecurring)}
+                <button type="button" onClick={() => { setIsRecurring(!isRecurring); setClientSecret(null); }}
                   className={`relative w-12 h-6 rounded-full border-none cursor-pointer transition-colors ${isRecurring ? 'bg-blue-500' : 'bg-white/10'}`}>
                   <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${isRecurring ? 'translate-x-7' : 'translate-x-1'}`} />
                 </button>
@@ -602,7 +553,7 @@ const BookingPage: React.FC = () => {
                         { value: 'monthly',  label: t('booking.recurring_monthly',  'Chaque mois') },
                       ] as const).map(opt => (
                         <button key={opt.value} type="button"
-                          onClick={() => setRecurrenceInterval(opt.value)}
+                          onClick={() => { setRecurrenceInterval(opt.value); setClientSecret(null); }}
                           className={`flex-1 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest border cursor-pointer transition-all ${
                             recurrenceInterval === opt.value ? 'bg-blue-600 border-blue-400 text-white' : 'bg-white/5 border-white/10 text-gray-400 hover:border-white/20'
                           }`}>
@@ -616,7 +567,7 @@ const BookingPage: React.FC = () => {
                     <input type="date"
                       value={recurrenceEndDate}
                       min={selectedDate}
-                      onChange={e => setRecurrenceEndDate(e.target.value)}
+                      onChange={e => { setRecurrenceEndDate(e.target.value); setClientSecret(null); }}
                       className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white outline-none focus:border-blue-500 transition-all text-sm" />
                     {recurrenceEndDate && selectedDate && recurrenceInterval && (() => {
                       const intervalDays = recurrenceInterval === 'weekly' ? 7 : recurrenceInterval === 'biweekly' ? 14 : 30;

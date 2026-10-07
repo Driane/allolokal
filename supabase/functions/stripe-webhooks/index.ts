@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import Stripe from "https://esm.sh/stripe@14.25.0?target=deno"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createBookingFromPayment, SlotTakenError } from '../_shared/bookings.ts'
 
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!, {
   // @ts-ignore: Version mismatch between SDK and Stripe API is handled by Stripe
@@ -63,6 +64,20 @@ serve(async (req) => {
           .from('profiles')
           .update({ subscription_tier: tier })
           .eq('id', userId);
+      }
+
+      // Safety net: client paid but never reached confirm-booking (tab closed, redirect, network)
+      if (pi.metadata?.kind === 'booking') {
+        try {
+          await createBookingFromPayment(
+            supabaseAdmin,
+            pi,
+            (id) => stripe.refunds.create({ payment_intent: id, reverse_transfer: true, refund_application_fee: true }),
+          );
+        } catch (err) {
+          // Slot taken: payment already refunded, nothing for Stripe to retry
+          if (!(err instanceof SlotTakenError)) throw err;
+        }
       }
     }
 

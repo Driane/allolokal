@@ -78,6 +78,8 @@ Réservation d'une prestation. Table centrale du cycle de vie + litiges.
 | `client_id`, `pro_id`                      | uuid (FK)   | → `profiles.id`                                             |
 | `service_id`                               | uuid (FK)   | → `services.id`                                             |
 | `status`                                   | text        | `pending` → `confirmed` → `completed` \| `disputed` \| …    |
+| `total_price`, `payment_status`            | numeric/text | Fixés côté serveur à partir du paiement Stripe ; non modifiables depuis le front (trigger `protect_booking_payment_fields`) |
+| `payment_intent_id`                        | text (unique) | PaymentIntent Stripe à l'origine de la réservation : une réservation par paiement |
 | `dispute_reason`, `disputed_at`, `disputed_by` | text/ts/uuid | Ouverture de litige (côté client)                       |
 | `dispute_resolution`                       | text        | `client_won` \| `pro_won` \| `closed`                       |
 | `dispute_admin_note`, `dispute_resolved_at`, `dispute_resolved_by` | | Résolution (côté admin)                        |
@@ -167,3 +169,4 @@ Tokens FCM par utilisateur (`platform` : `android` \| `ios`). Unique par `(user_
 - **Admin** : policies dédiées `Admins can view/update all …` conditionnées au rôle admin.
 - **Lecture publique ciblée** : profils affichés sur la carte, périodes de disponibilité.
 - **Service-role-only** : `consent_logs` (aucun accès client).
+- **Création service-role-only** : `bookings` — `INSERT` révoqué pour `anon` et `authenticated` ; les réservations sont créées par `confirm-booking` / `stripe-webhooks` après vérification du paiement.

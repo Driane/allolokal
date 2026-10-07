@@ -30,10 +30,21 @@ Configurés via `supabase secrets set NOM=valeur` (jamais dans le front) :
 ### `create-payment-intent`
 Crée un Payment Intent pour régler une prestation, avec commission de plateforme prélevée sur le compte Connect du pro.
 
-- **Requête** : `{ serviceId: uuid, duration: number /* heures, services horaires */, addonIds: uuid[] }` — JWT requis (`Authorization: Bearer`)
-- **Sécurité** : le client est l'utilisateur du JWT ; le pro, le prix du service et celui des options sont relus en base. Le montant n'est **jamais** fourni par le front : il est recalculé côté serveur (`price × durée` si service horaire, + options).
+- **Requête** : `{ serviceId: uuid, duration: number /* heures, services horaires */, addonIds: uuid[], bookingDate: 'YYYY-MM-DDTHH:MM:00', isRecurring: boolean, recurrenceInterval: 'weekly' | 'biweekly' | 'monthly', recurrenceEndDate: 'YYYY-MM-DD' | '' }` — JWT requis (`Authorization: Bearer`)
+- **Sécurité** : le client est l'utilisateur du JWT ; le pro, le prix du service et celui des options sont relus en base. Le montant n'est **jamais** fourni par le front : il est recalculé côté serveur (`price × durée` si service horaire, + options). Refuse un service inactif, un pro suspendu pour litige et un créneau déjà pris.
 - **Logique** : lit `stripe_connect_id` du pro ; commission **14 %** (première prestation) ou **9 %** (client récurrent = ≥ 1 booking `completed` avec ce pro) ; + **25 %** de taxe sur la commission ; `transfer_data.destination` = pro, `application_fee_amount` = commission totale.
+- **Metadata** : `{ kind: 'booking', clientId, proId, serviceId, hours, bookingDate, isRecurring, recurrenceInterval, recurrenceEndDate, isRepeated }` — la réservation sera créée à partir de ces valeurs, figées au moment du paiement.
 - **Réponse** : `{ clientSecret, paymentIntentId, amount /* centimes */, details: { rate, isRepeated, totalFee } }`
+
+### `confirm-booking`
+Crée la réservation après un paiement réussi. Le navigateur ne peut plus insérer de réservation (`REVOKE INSERT`, migration `secure_booking_creation.sql`).
+
+- **Requête** : `{ paymentIntentId: string, note?: string, imageUrl?: string }` — JWT requis.
+- **Sécurité** : relit le PaymentIntent chez Stripe ; exige `status = succeeded` et `metadata.clientId` = utilisateur du JWT. Prix, créneau, durée et récurrence viennent des metadata, jamais du body. `imageUrl` n'est accepté que dans le dossier `booking-attachments/<uid>/` de l'utilisateur.
+- **Idempotence** : `bookings.payment_intent_id` est unique ; un second appel (ou le webhook) retrouve la réservation existante.
+- **Créneau pris entre-temps** : remboursement automatique (`reverse_transfer` + `refund_application_fee`) et réponse `409`.
+- **Réponse** : `{ bookingId }`
+- Logique partagée avec `stripe-webhooks` : [`_shared/bookings.ts`](../supabase/functions/_shared/bookings.ts).
 
 ### `create-connected-account`
 Crée le compte **Stripe Connect Express** d'un pro (pays `HR`) et renvoie le lien d'onboarding.
@@ -57,7 +68,8 @@ Met à jour `profiles.subscription_tier` après paiement d'abonnement confirmé.
 ### `stripe-webhooks`
 Endpoint webhook Stripe (vérifié par `STRIPE_WEBHOOK_SECRET`). Événements gérés :
 - `account.updated` → si `details_submitted && charges_enabled`, passe `onboarding_complete = true`.
-- `payment_intent.succeeded` → filet de sécurité : applique `subscription_tier` depuis les metadata si le client s'est déconnecté avant `update-subscription`.
+- `payment_intent.succeeded` → filet de sécurité : applique `subscription_tier` depuis les metadata si le client s'est déconnecté avant `update-subscription` ; pour un paiement de réservation (`metadata.kind = 'booking'`), crée la réservation si `confirm-booking` n'a pas été appelé (onglet fermé, redirection 3-D Secure, coupure réseau).
+- Déployée avec `verify_jwt = false` : Stripe n'envoie pas de JWT, l'authenticité repose sur la signature `stripe-signature`.
 
 ---
 

@@ -2,6 +2,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import Stripe from 'https://esm.sh/stripe@12.0.0?target=deno'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { BOOKING_DATE_RE, DATE_RE, RECURRENCE_INTERVALS } from '../_shared/bookings.ts'
 
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') ?? '', {
   httpClient: Stripe.createFetchHttpClient(),
@@ -35,17 +36,24 @@ serve(async (req: Request) => {
     if (authError || !user) throw new Error('Unauthorized')
     const clientId = user.id
 
-    const { serviceId, duration, addonIds } = await req.json()
+    const { serviceId, duration, addonIds, bookingDate, isRecurring, recurrenceInterval, recurrenceEndDate } = await req.json()
     if (typeof serviceId !== 'string') throw new Error('Service invalide.')
+    if (typeof bookingDate !== 'string' || !BOOKING_DATE_RE.test(bookingDate)) throw new Error('Créneau invalide.')
+
+    const recurring = isRecurring === true
+    if (recurring && !RECURRENCE_INTERVALS.includes(recurrenceInterval)) throw new Error('Récurrence invalide.')
+    const recurrenceEnd = recurring && typeof recurrenceEndDate === 'string' && recurrenceEndDate !== '' ? recurrenceEndDate : ''
+    if (recurrenceEnd && !DATE_RE.test(recurrenceEnd)) throw new Error('Date de fin de récurrence invalide.')
 
     // 2. Le prix vient de la base : service, durée et options sont revérifiés ici
     const { data: service, error: serviceError } = await supabaseAdmin
       .from('services')
-      .select('id, user_id, price, price_unit, price_type')
+      .select('id, user_id, price, price_unit, price_type, is_active')
       .eq('id', serviceId)
       .single()
 
     if (serviceError || !service) throw new Error('Service introuvable.')
+    if (service.is_active === false) throw new Error("Ce service n'est plus disponible.")
     if (service.user_id === clientId) throw new Error('Vous ne pouvez pas réserver votre propre service.')
 
     const isHourly = service.price_unit === 'hour' || service.price_type === 'hourly'
@@ -76,12 +84,27 @@ serve(async (req: Request) => {
     const proId = service.user_id
     const { data: proProfile, error: proError } = await supabaseAdmin
       .from('profiles')
-      .select('stripe_connect_id')
+      .select('stripe_connect_id, is_paused_for_dispute')
       .eq('id', proId)
       .single()
 
     if (proError || !proProfile?.stripe_connect_id) {
       throw new Error("Le professionnel n'est pas configuré pour recevoir des paiements.")
+    }
+    if (proProfile.is_paused_for_dispute) {
+      throw new Error('Ce prestataire est temporairement indisponible suite à un litige en cours.')
+    }
+
+    // Ne pas encaisser un créneau déjà pris (revérifié à la confirmation, avec remboursement)
+    const { data: conflicts } = await supabaseAdmin
+      .from('bookings')
+      .select('id')
+      .eq('pro_id', proId)
+      .neq('status', 'cancelled')
+      .eq('booking_date', bookingDate)
+      .limit(1)
+    if (conflicts && conflicts.length > 0) {
+      throw new Error("Ce créneau vient d'être pris par quelqu'un d'autre. Veuillez en choisir un autre.")
     }
 
     // 4. Calcul de la commission (9% client récurrent, 14% sinon) + 25% de taxe sur la commission
@@ -107,11 +130,17 @@ serve(async (req: Request) => {
         destination: proProfile.stripe_connect_id,
       },
       application_fee_amount: totalApplicationFee,
+      // La réservation sera créée côté serveur à partir de ces métadonnées (confirm-booking / webhook)
       metadata: {
+        kind: 'booking',
         clientId,
         proId,
         serviceId: service.id,
         hours: String(hours),
+        bookingDate,
+        isRecurring: String(recurring),
+        recurrenceInterval: recurring ? recurrenceInterval : '',
+        recurrenceEndDate: recurrenceEnd,
         isRepeated: String(isRepeated)
       }
     })
